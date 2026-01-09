@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 class TetrisClearGame extends StatefulWidget {
@@ -8,7 +9,7 @@ class TetrisClearGame extends StatefulWidget {
   State<TetrisClearGame> createState() => _TetrisClearGameState();
 }
 
-class _TetrisClearGameState extends State<TetrisClearGame> {
+class _TetrisClearGameState extends State<TetrisClearGame> with TickerProviderStateMixin {
   static const int rows = 20;
   static const int cols = 10;
   
@@ -33,15 +34,32 @@ class _TetrisClearGameState extends State<TetrisClearGame> {
   int clears = 0;
   bool isClearing = false;
 
+  // Animation Controller for clear effects
+  late AnimationController _clearController;
+  List<int> clearingRows = [];
+
   @override
   void initState() {
     super.initState();
+    
+    _clearController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _clearController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _finalizeClear();
+      }
+    });
+
     resetGame();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _clearController.dispose();
     super.dispose();
   }
 
@@ -137,30 +155,35 @@ class _TetrisClearGameState extends State<TetrisClearGame> {
 
     if (linesToClear.isNotEmpty) {
       setState(() {
-        score += linesToClear.length * 100;
+        // Bonus points for clearing more lines
+        int points = linesToClear.length * 100;
+        if (linesToClear.length >= 4) points += 400; // Tetris bonus
+        
+        score += points;
         clears++;
         isClearing = true;
+        clearingRows = linesToClear;
       });
 
-      // Delay to show the full lines, then reset
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (!mounted) return;
-        setState(() {
-          // Flash effect or just clear
-          // For this game, we reset the scenario
-          _resetBoardState();
-        });
-      });
+      // Trigger the satisfying animation
+      _clearController.forward(from: 0.0);
     } else {
       // If missed the hole or something, just reset the piece or game?
-      // Let's just spawn a new piece. If it stacks up, it stacks up.
-      // But eventually we want to reset if they fail too much.
       _spawnPiece();
       if (!_canMove(pieceRow, pieceCol)) {
         // Game Over / Reset
         _resetBoardState();
       }
     }
+  }
+
+  void _finalizeClear() {
+    setState(() {
+      isClearing = false;
+      clearingRows.clear();
+      _resetBoardState();
+    });
+    _clearController.reset();
   }
 
   void _hardDrop() {
@@ -201,96 +224,206 @@ class _TetrisClearGameState extends State<TetrisClearGame> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          // Score / Stats
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStat('SCORE', '$score'),
-                _buildStat('CLEARS', '$clears'),
-              ],
-            ),
-          ),
+      body: AnimatedBuilder(
+        animation: _clearController,
+        builder: (context, child) {
+          // Screen Shake Effect
+          double offsetX = 0;
+          double offsetY = 0;
+          if (isClearing) {
+            // Shake intensity decays over time
+            double shakeAmount = 8.0 * (1.0 - _clearController.value); 
+            // Random-ish shake using sine waves
+            offsetX = sin(_clearController.value * pi * 30) * shakeAmount;
+            offsetY = cos(_clearController.value * pi * 25) * shakeAmount;
+          }
           
-          // Game Board
-          Expanded(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: cols / rows,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white24),
-                    color: Colors.black87,
-                  ),
-                  child: GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: rows * cols,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: cols,
-                    ),
-                    itemBuilder: (context, index) {
-                      int r = index ~/ cols;
-                      int c = index % cols;
-                      
-                      Color? color = board[r][c];
-                      
-                      // Draw active piece
-                      if (!isClearing) {
-                        for (var point in iPiece) {
-                          int pr = pieceRow + point.dx.toInt();
-                          int pc = pieceCol + point.dy.toInt();
-                          if (pr == r && pc == c) {
-                            color = currentPieceColor;
-                          }
-                        }
-                      }
-
-                      if (color == null) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.white10, width: 0.5),
-                          ),
-                        );
-                      }
-
-                      return Container(
-                        margin: const EdgeInsets.all(1),
+          return Transform.translate(
+            offset: Offset(offsetX, offsetY),
+            child: child,
+          );
+        },
+        child: Column(
+          children: [
+            // Score / Stats
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStat('SCORE', '$score'),
+                  _buildStat('CLEARS', '$clears'),
+                ],
+              ),
+            ),
+            
+            // Game Board
+            Expanded(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: cols / rows,
+                  child: Stack(
+                    children: [
+                      // The Grid
+                      Container(
                         decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: color.withOpacity(0.5),
-                              blurRadius: 2,
-                              spreadRadius: 0,
-                            )
-                          ]
+                          border: Border.all(color: Colors.white24),
+                          color: Colors.black87,
                         ),
-                      );
-                    },
+                        child: GridView.builder(
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: rows * cols,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: cols,
+                          ),
+                          itemBuilder: (context, index) {
+                            int r = index ~/ cols;
+                            int c = index % cols;
+                            
+                            Color? color = board[r][c];
+                            
+                            // Draw active piece
+                            if (!isClearing) {
+                              for (var point in iPiece) {
+                                int pr = pieceRow + point.dx.toInt();
+                                int pc = pieceCol + point.dy.toInt();
+                                if (pr == r && pc == c) {
+                                  color = currentPieceColor;
+                                }
+                              }
+                            }
+
+                            // Special rendering for clearing rows
+                            if (isClearing && clearingRows.contains(r)) {
+                              return _buildClearingBlock(color ?? Colors.white);
+                            }
+
+                            if (color == null) {
+                              return Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.white10, width: 0.5),
+                                ),
+                              );
+                            }
+
+                            return Container(
+                              margin: const EdgeInsets.all(1),
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: color.withOpacity(0.5),
+                                    blurRadius: 2,
+                                    spreadRadius: 0,
+                                  )
+                                ]
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      
+                      // "TETRIS!" Text Overlay
+                      if (isClearing && clearingRows.length >= 4)
+                        Center(
+                          child: _buildTetrisText(),
+                        ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ),
-          
-          // Controls
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildControlButton(Icons.arrow_back, _moveLeft),
-                _buildControlButton(Icons.arrow_downward, _hardDrop, size: 72, color: Colors.cyanAccent),
-                _buildControlButton(Icons.arrow_forward, _moveRight),
-              ],
+            
+            // Controls
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildControlButton(Icons.arrow_back, _moveLeft),
+                  _buildControlButton(Icons.arrow_downward, _hardDrop, size: 72, color: Colors.cyanAccent),
+                  _buildControlButton(Icons.arrow_forward, _moveRight),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClearingBlock(Color color) {
+    return AnimatedBuilder(
+      animation: _clearController,
+      builder: (context, child) {
+        double t = _clearController.value;
+        
+        // Flash white initially
+        Color displayColor;
+        if (t < 0.15) {
+          displayColor = Colors.white;
+        } else {
+          // Then fade to original or keep white-ish
+          displayColor = Color.lerp(Colors.white, color, (t - 0.15) * 2) ?? color;
+        }
+        
+        // Fade out opacity
+        double opacity = (1.0 - t).clamp(0.0, 1.0);
+        
+        return Opacity(
+          opacity: opacity,
+          child: Container(
+            margin: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              color: displayColor,
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: [
+                BoxShadow(
+                  color: displayColor.withOpacity(0.8),
+                  blurRadius: 10 * (1 - t), // Glow shrinks
+                  spreadRadius: 2 * (1 - t),
+                )
+              ]
             ),
           ),
-        ],
-      ),
+        );
+      }
+    );
+  }
+
+  Widget _buildTetrisText() {
+    return AnimatedBuilder(
+      animation: _clearController,
+      builder: (context, child) {
+        double t = _clearController.value;
+        // Scale up: 0.5 -> 1.5
+        double scale = 0.5 + (t * 1.5); 
+        // Fade out near the end
+        double opacity = (1.0 - t * 1.2).clamp(0.0, 1.0);
+        
+        return Transform.scale(
+          scale: scale,
+          child: Opacity(
+            opacity: opacity,
+            child: const Text(
+              "TETRIS!",
+              style: TextStyle(
+                color: Colors.cyanAccent,
+                fontSize: 56,
+                fontWeight: FontWeight.w900,
+                fontStyle: FontStyle.italic,
+                letterSpacing: 4,
+                shadows: [
+                  Shadow(blurRadius: 10, color: Colors.blue, offset: Offset(0,0)),
+                  Shadow(blurRadius: 20, color: Colors.white, offset: Offset(0,0)),
+                  Shadow(blurRadius: 30, color: Colors.purpleAccent, offset: Offset(0,0)),
+                ]
+              ),
+            ),
+          ),
+        );
+      }
     );
   }
 
