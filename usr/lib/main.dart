@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'games/tetris_clear_game.dart';
+import 'games/solitaire_win_game.dart';
 
 void main() {
   runApp(const MyApp());
@@ -21,6 +22,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const MyHomePage(title: 'Satisfying Moments'),
         '/tetris_clear': (context) => const TetrisClearGame(),
+        '/solitaire_win': (context) => const SolitaireWinGame(),
       },
     );
   }
@@ -44,22 +46,33 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(widget.title),
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'Choose a Game:',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            _buildGameCard(
-              context,
-              'Tetris Clear',
-              'Repeatedly clear 4 lines with a satisfying drop.',
-              Icons.grid_on,
-              '/tetris_clear',
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Choose a Game:',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              _buildGameCard(
+                context,
+                'Tetris Clear',
+                'Repeatedly clear 4 lines with a satisfying drop.',
+                Icons.grid_on,
+                '/tetris_clear',
+              ),
+              _buildGameCard(
+                context,
+                'Solitaire Win',
+                'Experience the classic bouncing cards winning moment.',
+                Icons.style, // Cards icon
+                '/solitaire_win',
+              ),
+            ],
+          ),
         ),
       ),
     );
